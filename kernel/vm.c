@@ -440,3 +440,35 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+void vmprint(pagetable_t pagetable){
+  printf("page table %p\n", pagetable);  //print the address of pagetable
+  pgtblprint(pagetable, 0);
+}
+
+void
+pgtblprint (pagetable_t pagetable,int depth)
+{
+  printf("page table %p\n", pagetable);  //print the address of pagetable
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    //PTE_V 有效（被使用的），且pte项不为空，说明时有效的PTE，可以打印;
+    if(pte & PTE_V){
+      printf("..");
+      for(int j = 0; j < depth; j++){
+      	printf(" ..");
+      	}
+      //分别是页数、pte、pa
+      printf("%d: pte %p pa %p\n", i, pte, PTE2PA(pte));
+    
+    //递归获取PTE项的数目，并且打印
+    //如果 PTE 的读、写、执行权限均为 0，说明这是一个指向下一级页表的 PTE，depth+1。
+    if((pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      	uint64 child = PTE2PA(pte);
+      	pgtblprint((pagetable_t)child, depth+1);
+    	}
+    }
+  }
+  return;
+}
