@@ -108,6 +108,8 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+pagetable_t     proc_kpagetable(struct proc* p);
+void            proc_freekpagetable(pagetable_t kpagetable, uint64 sz);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -178,8 +180,13 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
-void		 vmprint(pagetable_t); 
-void		 pgtblprint (pagetable_t,int);
+void		    vmprint(pagetable_t); 
+void		    pgtblprint (pagetable_t,int);
+void            vminit(pagetable_t pagetable);
+pagetable_t     kvmcreate();
+void            vminithart(pagetable_t pagetable);
+uint64          vmpa(pagetable_t pagetable, uint64 va);
+void            vmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm);
 
 // plic.c
 void            plicinit(void);

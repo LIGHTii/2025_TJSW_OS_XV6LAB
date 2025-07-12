@@ -22,6 +22,27 @@ static void freeproc(struct proc *p);
 extern char trampoline[]; // trampoline.S
 
 // initialize the proc table at boot time.
+// void
+// procinit(void)
+// {
+//   struct proc *p;
+  
+//   initlock(&pid_lock, "nextpid");
+//   for(p = proc; p < &proc[NPROC]; p++) {
+//       initlock(&p->lock, "proc");
+
+//       // Allocate a page for the process's kernel stack.
+//       // Map it high in memory, followed by an invalid
+//       // guard page.
+//       char *pa = kalloc();
+//       if(pa == 0)
+//         panic("kalloc");
+//       uint64 va = KSTACK((int) (p - proc));
+//       kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+//       p->kstack = va;
+//   }
+//   kvminithart();
+// }
 void
 procinit(void)
 {
@@ -30,19 +51,10 @@ procinit(void)
   initlock(&pid_lock, "nextpid");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
-
-      // Allocate a page for the process's kernel stack.
-      // Map it high in memory, followed by an invalid
-      // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
   }
   kvminithart();
 }
+
 
 // Must be called with interrupts disabled,
 // to prevent race with process being moved
@@ -120,6 +132,21 @@ found:
     release(&p->lock);
     return 0;
   }
+  /** 创建内核页表 */
+  p->kpagetable = proc_kpagetable(p);
+  if(p->kpagetable == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  /** 理顺内核栈的映射关系 */
+  char *pa = kalloc();
+  if(pa == 0)
+    panic("kalloc");
+  uint64 va = KSTACK(0);
+  vmmap(p->kpagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -149,6 +176,16 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  
+  // 在释放内核页表之前需要释放内核栈 
+  if(p->kstack)
+    uvmunmap(p->kpagetable, p->kstack, 1, 1);
+  p->kstack = 0;
+
+  if(p->kpagetable)
+    proc_freekpagetable(p->kpagetable, p->sz);
+  p->kpagetable = 0;
+
   p->state = UNUSED;
 }
 
@@ -473,6 +510,7 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        vminithart(p->kpagetable);
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
@@ -696,4 +734,39 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+/** 为给定的进程创建内核页表 */
+pagetable_t
+proc_kpagetable(struct proc* p)
+{
+  pagetable_t kpagetable;
+
+  // An empty page table.
+  kpagetable = kvmcreate();
+  if(kpagetable == 0)
+    return 0;
+
+  vminit(kpagetable);
+
+  return kpagetable;
+}
+
+void 
+proc_freekpagetable(pagetable_t kpagetable, uint64 sz)
+{
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i=0; i<512; i++) {
+    pte_t pte = kpagetable[i];
+    if((pte & PTE_V) == 0) 
+      continue;
+
+    /** 该PTE有效（内部节点和叶子节点） */
+    if((pte & (PTE_R|PTE_W|PTE_X)) == 0) {
+      uint64 child = PTE2PA(pte);
+      proc_freekpagetable((pagetable_t)child, sz);
+      kpagetable[i] = 0;
+    }
+  }
+  kfree((void*)kpagetable);
 }
