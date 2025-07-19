@@ -258,6 +258,8 @@ userinit(void)
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
+  u2kvmcopy(p->pagetable, p->kpagetable, 0, p->sz);
+
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -280,11 +282,17 @@ growproc(int n)
 
   sz = p->sz;
   if(n > 0){
+    if(PGROUNDUP(sz+n) >= PLIC)
+      return -1;
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
     }
+    if(u2kvmcopy(p->pagetable, p->kpagetable, p->sz, sz) < 0)
+      return -1;
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
+    /** sz已变小，sz <- sz-|n|，此时p->sz > sz */
+    sz = vmdealloc(p->kpagetable, p->sz, sz, 0);
   }
   p->sz = sz;
   return 0;
@@ -311,6 +319,13 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
+
+  /** 将子进程的用户态页表塞到子进程的内核页表中 */
+  if(u2kvmcopy(np->pagetable, np->kpagetable, 0, np->sz) < 0) {
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
 
   np->parent = p;
 
