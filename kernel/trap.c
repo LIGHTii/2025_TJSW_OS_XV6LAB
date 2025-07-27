@@ -76,6 +76,15 @@ usertrap(void)
   if(p->killed)
     exit(-1);
 
+  // lab4-3
+  if(which_dev == 2){   // timer interrupt
+    // increase the passed ticks
+    if(p->interval != 0 && ++p->passedticks == p->interval){
+      p->passedticks = 0;
+      p->trapframe->epc = p->handler;   // execute handler() when return to user space 
+    }
+  }
+
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();

@@ -176,8 +176,7 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 	$U/_printf_example\
-
-
+	$U/_alarmtest\
 
 
 ifeq ($(LAB),$(filter $(LAB), pgtbl lock))
