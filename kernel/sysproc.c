@@ -99,8 +99,17 @@ sys_uptime(void)
 
 // lab4-3
 uint64 sys_sigreturn(void) {
-    return 0;
+    struct proc* p = myproc();
+    // trapframecopy must have the copy of trapframe
+    if(p->trapframecopy != p->trapframe + 512) {
+        return -1;
+    }
+    memmove(p->trapframe, p->trapframecopy, sizeof(struct trapframe));   // restore the trapframe
+    p->passedticks = 0;     // prevent re-entrant
+    p->trapframecopy = 0;    // 置零
+    return p->trapframe->a0;	// 返回a0,避免被返回值覆盖
 }
+
 
 // lab4-3
 uint64 sys_sigalarm(void) {
