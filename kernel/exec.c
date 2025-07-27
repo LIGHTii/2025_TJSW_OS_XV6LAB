@@ -51,6 +51,11 @@ exec(char *path, char **argv)
     uint64 sz1;
     if((sz1 = uvmalloc(pagetable, sz, ph.vaddr + ph.memsz)) == 0)
       goto bad;
+    // limit added by exp3, program should not go over PLIC or else
+    // kernel page-table's mapping of the program would not fit.
+    if(sz1 >= PLIC) {
+      goto bad;
+    }
     sz = sz1;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
@@ -107,7 +112,14 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(p->name, last, sizeof(p->name));
-    
+  // synchronize kernel page-table's mapping of user memory
+  uvmunmap(p->kernelpgtbl, 0, PGROUNDUP(oldsz)/PGSIZE, 0);
+  kvmcopymappings(pagetable, p->kernelpgtbl, 0, sz);
+  
+
+  // TODO: unmap old program mapping [0,oldsz] in kernel page table    
+  // TODO: map [0,sz] in the new user page-table to kernel page-table
+
   // Commit to the user image.
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
@@ -116,17 +128,7 @@ exec(char *path, char **argv)
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
 
-  /** 清除内核页表中对用户态页表的旧映射 */
-  uvmunmap(p->kpagetable, 0, PGROUNDUP(oldsz)/PGSIZE, 0);
-  /** 在替换原用户页表之后，将新用户页表塞进内核页表中 */
-  if(u2kvmcopy(p->pagetable, p->kpagetable, 0, p->sz) < 0) 
-    goto bad;
-
-  if(p->pid == 1)
-    vmprint(p->pagetable);
-
-  //vmprint(p->pagetable);//在返回之前打印页表
-
+  vmprint(p->pagetable);
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:
