@@ -65,6 +65,36 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause()==13 || r_scause()==15) { 
+    /** 缺页中断 */
+    uint64 va = r_stval();
+
+    /** 虚拟地址是否合法（在堆区，见xv6 book Figure3.4） */
+    if(va>=p->sz || va<=p->trapframe->sp)
+      goto killing;
+      
+    /** 尝试分配空间（缺页中断handler） */
+    char* mem = kalloc();
+    if(mem == 0)
+      goto killing;
+
+    /** 做好新页的空间映射工作 */
+    memset(mem, 0, PGSIZE);
+    va = PGROUNDDOWN(va);
+    if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) 
+      goto freeing;
+
+    /** 顺利handle缺页中断 */
+    goto rest;
+
+  freeing:
+    kfree(mem);
+
+  killing:
+    p->killed = 1;
+
+  rest:
+    ;
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
