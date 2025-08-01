@@ -5,7 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include "spinlock.h"
+#include "proc.h"
 /*
  * the kernel's page table.
  */
@@ -101,10 +102,32 @@ walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
 
   pte = walk(pagetable, va, 0);
-  if(pte == 0)
-    return 0;
-  if((*pte & PTE_V) == 0)
-    return 0;
+  // lab5-3
+  if(pte==0 || (*pte & PTE_V)==0) {
+    /** 针对read或write，内存还未分配 */
+    struct proc* p = myproc();
+
+    /** 虚拟地址是否合法（在堆区，见xv6 book Figure3.4） */
+    if(va>=p->sz || va<=p->trapframe->sp)
+      return 0;
+
+    char* mem = kalloc();
+    if(mem == 0)
+      return 0;
+
+    memset(mem, 0, PGSIZE);
+    va = PGROUNDDOWN(va);
+    if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) {
+      kfree(mem);
+      return 0;
+    }
+
+    return (uint64)mem;
+  }
+  // if(pte == 0)
+  //   return 0;
+  // if((*pte & PTE_V) == 0)
+  //   return 0;
   if((*pte & PTE_U) == 0)
     return 0;
   pa = PTE2PA(*pte);
@@ -181,7 +204,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
+      continue; //lab5-3  
+      // panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0){
       //panic("uvmunmap: not mapped");
       continue;  //lab5-2
@@ -317,9 +341,11 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+    continue; //lab5-3
+      // panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+      continue; //lab5-3
+      // panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)

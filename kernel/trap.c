@@ -70,28 +70,27 @@ usertrap(void)
     uint64 va = r_stval();
 
     /** 虚拟地址是否合法（在堆区，见xv6 book Figure3.4） */
-    if(va>=p->sz || va<=p->trapframe->sp)
-      goto killing;
-      
+    if(va>=p->sz || va<=p->trapframe->sp){
+      p->killed = 1;
+      goto end;
+    }
     /** 尝试分配空间（缺页中断handler） */
     char* mem = kalloc();
-    if(mem == 0)
-      goto killing;
+    if(mem == 0){
+      p->killed = 1;
+      goto end;
+    }
 
     /** 做好新页的空间映射工作 */
     memset(mem, 0, PGSIZE);
     va = PGROUNDDOWN(va);
-    if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0) 
-      goto freeing;
-
+    if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+      kfree(mem);
+      p->killed = 1;
+      goto end;
+    }
     /** 顺利handle缺页中断 */
     goto rest;
-
-  freeing:
-    kfree(mem);
-
-  killing:
-    p->killed = 1;
 
   rest:
     ;
@@ -103,6 +102,7 @@ usertrap(void)
     p->killed = 1;
   }
 
+end:
   if(p->killed)
     exit(-1);
 

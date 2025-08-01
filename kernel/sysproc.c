@@ -47,6 +47,11 @@ sys_sbrk(void)
   if(argint(0, &n) < 0)
     return -1;
   addr = myproc()->sz;
+  //lab5-3
+  /** 堆空间负增长 */
+  if(n < 0)
+    uvmdealloc(myproc()->pagetable, addr, myproc()->sz);
+
   // lab5-1
   myproc()->sz += n;    // increase size but not allocate memory
   // if(growproc(n) < 0)
