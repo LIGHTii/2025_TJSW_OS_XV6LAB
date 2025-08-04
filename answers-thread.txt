@@ -1,0 +1,1 @@
+During this experiment, it was observed that increasing NBUCKET to 7 in lab7-2 reduced the probability of collisions, which resulted in a certain performance improvement.
