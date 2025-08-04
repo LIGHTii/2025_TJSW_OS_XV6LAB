@@ -1,5 +1,6 @@
 struct buf;
 struct context;
+struct ctx;
 struct file;
 struct inode;
 struct pipe;
