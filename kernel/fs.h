@@ -29,6 +29,9 @@ struct superblock {
 #define NDOUBLYINDIRECT (NINDIRECT * NINDIRECT)     // lab9-1
 #define MAXFILE (NDIRECT + NINDIRECT + NDOUBLYINDIRECT)    // lab9-1
 
+// the max depth of symlinks - lab9-2
+#define NSYMLINK 10
+
 // On-disk inode structure
 struct dinode {
   short type;           // File type
